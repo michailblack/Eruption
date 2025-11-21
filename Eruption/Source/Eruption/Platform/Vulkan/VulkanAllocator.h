@@ -9,7 +9,6 @@
 
 #include <expected>
 #include <source_location>
-#include <span>
 #include <string_view>
 #include <unordered_map>
 

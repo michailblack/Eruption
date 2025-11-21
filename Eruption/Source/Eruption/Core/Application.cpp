@@ -48,6 +48,7 @@ namespace Eruption
 	void Application::Run()
 	{
 		OnInit();
+
 		while (m_Running)
 		{
 			static uint64_t s_FrameCounter = 0;
@@ -57,6 +58,14 @@ namespace Eruption
 			if (!m_Minimized)
 			{
 				Timer cpuTimer;
+
+				HandledQueuedEvents();
+
+				for (Layer* layer : m_LayerStack)
+				{
+					if (layer->IsEnabled())
+						layer->OnUpdate(m_DeltaTime);
+				}
 
 				m_Window->SwapBuffers();
 
@@ -91,6 +100,10 @@ namespace Eruption
 
 		m_Window->ProcessEvents();
 	}
+	void Application::HandledQueuedEvents()
+	{
+		m_EventBus.ProcessQueue();
+	}
 
 	float Application::GetTime()
 	{
@@ -99,10 +112,44 @@ namespace Eruption
 
 	void Application::OnEvent(Event& event)
 	{
-		EventDispatcher dispatcher(event);
-		dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& e) { return OnWindowResize(e); });
-		dispatcher.Dispatch<WindowMinimizeEvent>([this](WindowMinimizeEvent& e) { return OnWindowMinimize(e); });
-		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& e) { return OnWindowClose(e); });
+		for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
+		{
+			if (event.Handled)
+				break;
+
+			if ((*it)->IsEnabled())
+				(*it)->OnEvent(event);
+		}
+
+		if (!event.Handled)
+		{
+			EventDispatcher dispatcher(event);
+			dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& e) { return OnWindowResize(e); });
+			dispatcher.Dispatch<WindowMinimizeEvent>([this](WindowMinimizeEvent& e) { return OnWindowMinimize(e); });
+			dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& e) { return OnWindowClose(e); });
+		}
+
+		ER_CORE_ASSERT(event.Handled);
+	}
+
+	void Application::PushLayer(Layer* layer)
+	{
+		m_LayerStack.PushLayer(layer);
+	}
+
+	void Application::PushOverlay(Layer* layer)
+	{
+		m_LayerStack.PushOverlay(layer);
+	}
+
+	void Application::PopLayer(Layer* layer)
+	{
+		m_LayerStack.PopLayer(layer);
+	}
+
+	void Application::PopOverlay(Layer* layer)
+	{
+		m_LayerStack.PopOverlay(layer);
 	}
 
 	bool Application::OnWindowResize(WindowResizeEvent& e)

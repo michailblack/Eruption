@@ -133,7 +133,7 @@ namespace Eruption
 			for (auto& handler : it->second)
 			{
 				if (handler->Invoke(event))
-					return;        // Event was handled
+					return;
 			}
 		}
 

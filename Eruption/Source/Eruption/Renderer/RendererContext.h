@@ -11,7 +11,7 @@ namespace Eruption
 		RendererContext()          = default;
 		virtual ~RendererContext() = default;
 
-		virtual void Init(GLFWwindow* window) = 0;
+		virtual void Create(GLFWwindow* window) = 0;
 
 		static Ref<RendererContext> Create();
 	};

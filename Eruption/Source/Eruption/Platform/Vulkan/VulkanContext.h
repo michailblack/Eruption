@@ -11,10 +11,10 @@ namespace Eruption
 	class VulkanValidation
 	{
 	public:
-		void Init();
-		void Destroy(vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher) const;
+		VulkanValidation();
 
-		void CreateDebugMessenger(vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher);
+		void Create(vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher);
+		void Destroy(vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher) const;
 
 		[[nodiscard]] const std::vector<const char*>& GetRequiredLayers() const { return m_Layers; }
 		[[nodiscard]] const std::vector<const char*>& GetRequiredExtensions() const { return m_Extensions; }
@@ -39,7 +39,7 @@ namespace Eruption
 		VulkanContext() = default;
 		~VulkanContext() override;
 
-		void Init(GLFWwindow* window) override;
+		void Create(GLFWwindow* window) override;
 
 		[[nodiscard]] vk::Instance         GetVulkanInstance() const { return m_VulkanInstance; }
 		[[nodiscard]] Ref<VulkanDevice>    GetDevice() const { return m_Device; }
@@ -52,6 +52,9 @@ namespace Eruption
 		static vk::Instance         GetInstance() { return Get()->GetVulkanInstance(); }
 		static Ref<VulkanDevice>    GetCurrentDevice() { return Get()->GetDevice(); }
 		static Ref<VulkanAllocator> GetCurrentAllocator() { return Get()->GetAllocator(); }
+
+	private:
+		void CreateSurface(GLFWwindow* window);
 
 	private:
 		Ref<VulkanPhysicalDevice> m_PhysicalDevice;

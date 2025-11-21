@@ -23,6 +23,9 @@ namespace Eruption
 	class Window
 	{
 	public:
+		using EventCallbackFn = std::function<void(Event&)>;
+
+	public:
 		explicit Window(const WindowSpecification& specification);
 		virtual ~Window();
 
@@ -36,6 +39,8 @@ namespace Eruption
 
 		virtual void Maximize();
 		virtual void CenterWindow();
+
+		void SetEventCallback(const EventCallbackFn& callback) { m_Data.EventCallback = callback; }
 
 		[[nodiscard]] uint32_t GetWidth() const { return m_Data.Width; }
 		[[nodiscard]] uint32_t GetHeight() const { return m_Data.Height; }
@@ -62,8 +67,9 @@ namespace Eruption
 
 		struct WindowData
 		{
-			std::string Title;
-			uint32_t    Width, Height;
+			std::string     Title;
+			uint32_t        Width, Height;
+			EventCallbackFn EventCallback;
 		} m_Data;
 
 		Ref<RendererContext>   m_RendererContext;

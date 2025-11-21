@@ -108,7 +108,7 @@ namespace Eruption
 	}        // namespace Utils
 
 #ifdef ER_DEBUG
-	void VulkanValidation::Init()
+	VulkanValidation::VulkanValidation()
 	{
 		const std::vector instanceLayerProperties = vk::enumerateInstanceLayerProperties();
 		ER_CORE_INFO_TAG("Renderer", "Vulkan Instance Layers:");
@@ -134,7 +134,8 @@ namespace Eruption
 
 		m_Extensions.push_back(vk::EXTDebugUtilsExtensionName);
 
-		m_DebugMessengerCreateInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+		m_DebugMessengerCreateInfo.messageSeverity = /*vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+		                                             vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |*/
 		                                             vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
 		                                             vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 		m_DebugMessengerCreateInfo.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
@@ -144,21 +145,19 @@ namespace Eruption
 		m_DebugMessengerCreateInfo.pUserData       = nullptr;
 	}
 
-	void VulkanValidation::Destroy(
-	    vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher
-	) const
-	{
-		vulkanInstance.destroyDebugUtilsMessengerEXT(m_DebugMessenger, nullptr, dispatcher);
-	}
-
-	void VulkanValidation::CreateDebugMessenger(
-	    vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher
-	)
+	void VulkanValidation::Create(vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher)
 	{
 		if (m_DebugMessenger != VK_NULL_HANDLE)
 			return;
 
 		m_DebugMessenger = vulkanInstance.createDebugUtilsMessengerEXT(m_DebugMessengerCreateInfo, nullptr, dispatcher);
+	}
+
+	void VulkanValidation::Destroy(
+	    vk::Instance vulkanInstance, const vk::detail::DispatchLoaderDynamic& dispatcher
+	) const
+	{
+		vulkanInstance.destroyDebugUtilsMessengerEXT(m_DebugMessenger, nullptr, dispatcher);
 	}
 
 #endif
@@ -176,7 +175,7 @@ namespace Eruption
 		m_VulkanInstance = VK_NULL_HANDLE;
 	}
 
-	void VulkanContext::Init(GLFWwindow* window)
+	void VulkanContext::Create(GLFWwindow* window)
 	{
 		ER_CORE_INFO_TAG("Renderer", "VulkanContext::Create");
 
@@ -204,7 +203,6 @@ namespace Eruption
 		instanceCreateInfo.pApplicationInfo = &appInfo;
 #ifdef ER_DEBUG
 		m_Validation = CreateScope<VulkanValidation>();
-		m_Validation->Init();
 
 		instanceCreateInfo.setPEnabledLayerNames(m_Validation->GetRequiredLayers());
 
@@ -221,10 +219,7 @@ namespace Eruption
 
 		m_VulkanInstance = vk::createInstance(instanceCreateChain.get<vk::InstanceCreateInfo>());
 
-		// Create surface
-		VkSurfaceKHR surface = VK_NULL_HANDLE;
-		VK_CHECK_RESULT(glfwCreateWindowSurface(m_VulkanInstance, window, nullptr, &surface));
-		m_Surface = vk::SurfaceKHR(surface);
+		CreateSurface(window);
 
 		PhysicalDeviceRequirements requirements{};
 		requirements.Extensions = {vk::KHRSwapchainExtensionName};
@@ -240,22 +235,25 @@ namespace Eruption
 
 		m_PhysicalDevice = VulkanPhysicalDevice::Select(requirements);
 
-#ifdef ER_DEBUG
 		m_Device = CreateRef<VulkanDevice>(m_PhysicalDevice);
-#else
-		m_Device = CreateRef<VulkanDevice>(m_PhysicalDevice);
-#endif
 
 		m_DispatchLoaderDynamic = CreateRef<vk::detail::DispatchLoaderDynamic>();
 		m_DispatchLoaderDynamic->init(m_VulkanInstance, m_Device->GetVulkanDevice());
 
 #ifdef ER_DEBUG
-		m_Validation->CreateDebugMessenger(m_VulkanInstance, *m_DispatchLoaderDynamic);
+		m_Validation->Create(m_VulkanInstance, *m_DispatchLoaderDynamic);
 #endif
 
 		m_Allocator = CreateRef<VulkanAllocator>();
 		m_Allocator->Init(m_VulkanInstance, m_Device);
 
 		m_PipelineCache = m_Device->GetVulkanDevice().createPipelineCache(vk::PipelineCacheCreateInfo{});
+	}
+
+	void VulkanContext::CreateSurface(GLFWwindow* window)
+	{
+		VkSurfaceKHR surface = VK_NULL_HANDLE;
+		VK_CHECK_RESULT(glfwCreateWindowSurface(m_VulkanInstance, window, nullptr, &surface));
+		m_Surface = vk::SurfaceKHR(surface);
 	}
 }        // namespace Eruption
