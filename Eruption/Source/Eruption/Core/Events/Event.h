@@ -66,7 +66,7 @@ namespace Eruption
 	class Event
 	{
 	public:
-		bool Handled = false;
+		bool IsHandled = false;
 
 		virtual ~Event()                                           = default;
 		[[nodiscard]] virtual EventType   GetEventType() const     = 0;
@@ -77,20 +77,29 @@ namespace Eruption
 		[[nodiscard]] bool IsInCategory(EventCategory category) const { return GetCategoryFlags() & category; }
 	};
 
+	template <typename TEvent>
+	concept CEvent = std::is_base_of_v<Event, TEvent>;
+
+	template <typename TCallable, typename TEvent>
+	concept CEventCallback = requires(TCallable callback, TEvent& event) {
+		{ callback(event) } -> std::same_as<bool>;
+	};
+
+#define ER_BIND_EVENT_FN(OnEventFn) \
+	[this] template <CEvent TEvent> \
+	(TEvent&&) -> bool { return this->OnEventFn(std::forward<TEvent>(event)); }
+
 	class EventDispatcher
 	{
-		template <typename T>
-		using EventFn = std::function<bool(T&)>;
-
 	public:
 		explicit EventDispatcher(Event& event) : m_Event(event) {}
 
-		template <typename T>
-		bool Dispatch(EventFn<T> func)
+		template <CEvent TEvent, CEventCallback<TEvent> TCallback>
+		bool Dispatch(TCallback callback)
 		{
-			if (m_Event.GetEventType() == T::GetStaticType() && !m_Event.Handled)
+			if (m_Event.GetEventType() == TEvent::GetStaticType() && !m_Event.IsHandled)
 			{
-				m_Event.Handled = func(*static_cast<T*>(&m_Event));
+				m_Event.IsHandled = callback(reinterpret_cast<TEvent&>(m_Event));
 				return true;
 			}
 			return false;

@@ -1,15 +1,16 @@
 #pragma once
-#include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_raii.hpp>
 
-namespace Eruption::VulkanUtils
+namespace Eruption::Vulkan::Utils
 {
 	void CheckResult(vk::Result result, const char* file, int line);
-	void SetDebugUtilsObjectName(
-	    vk::Device device, vk::ObjectType objectType, const void* handle, std::string_view name
-	);
-}        // namespace Eruption::VulkanUtils
 
-#define VK_CHECK_RESULT(result)                                                                    \
-	{                                                                                              \
-		::Eruption::VulkanUtils::CheckResult(static_cast<vk::Result>(result), __FILE__, __LINE__); \
+	void SetDebugUtilsObjectName(
+	    const vk::raii::Device& device, vk::ObjectType objectType, const void* handle, std::string_view name
+	);
+}        // namespace Eruption::Vulkan::Utils
+
+#define VK_CHECK_RESULT(result)                                                                      \
+	{                                                                                                \
+		::Eruption::Vulkan::Utils::CheckResult(static_cast<vk::Result>(result), __FILE__, __LINE__); \
 	}

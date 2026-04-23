@@ -1,18 +1,22 @@
 #pragma once
-#include "Eruption/Core/Application.h"
-
-#include "Eruption/Renderer/RendererConfig.h"
-#include "Eruption/Renderer/RendererContext.h"
+#include "Eruption/Renderer/RendererDevice.h"
 
 namespace Eruption
 {
-
 	class Renderer
 	{
 	public:
-		static Ref<RendererContext> GetContext() { return Application::Get().GetWindow().GetRendererContext(); }
+		struct Config
+		{
+			uint32_t FramesInFlight = 3;
+		};
 
-		static const RendererConfig& GetConfig();
+	public:
+		static void Init(const Scope<Window>& window);
+
+		static Ref<RendererDevice> GetRendererDevice();
+
+		static const Config& GetConfig();
 	};
 
 }        // namespace Eruption

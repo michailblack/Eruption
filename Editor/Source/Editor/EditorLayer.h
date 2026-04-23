@@ -10,14 +10,10 @@ namespace Eruption
 	class EditorLayer : public Layer
 	{
 	public:
-		EditorLayer();
 		~EditorLayer() override = default;
 
-		void OnAttach() override;
-		void OnDetach() override;
 		void OnUpdate(DeltaTime dt) override;
-		void OnEvent(Event& event) override;
-		void OnImGuiRender() override;
+		void OnRender() override {}
 
 	private:
 		bool OnKeyPressed(KeyPressedEvent& e);

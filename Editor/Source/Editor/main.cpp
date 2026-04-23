@@ -9,7 +9,7 @@ namespace Eruption
 	public:
 		explicit EditorApplication(const ApplicationSpecification& spec) : Application(spec)
 		{
-			PushLayer(new EditorLayer());
+			PushLayer<EditorLayer>();
 		}
 	};
 

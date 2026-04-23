@@ -4,11 +4,26 @@ namespace Eruption
 {
 	namespace
 	{
-		RendererConfig s_RendererConfig;
+		struct
+		{
+			Renderer::Config Config;
+
+			Ref<RendererDevice> RendererDevice;
+		} s_Data;
+	}        // namespace
+
+	void Renderer::Init(const Scope<Window>& window)
+	{
+		s_Data.RendererDevice = CreateRef<RendererDevice>(window);
 	}
 
-	const RendererConfig& Renderer::GetConfig()
+	Ref<RendererDevice> Renderer::GetRendererDevice()
 	{
-		return s_RendererConfig;
+		return s_Data.RendererDevice;
+	}
+
+	const Renderer::Config& Renderer::GetConfig()
+	{
+		return s_Data.Config;
 	}
 }        // namespace Eruption

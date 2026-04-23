@@ -1,6 +1,4 @@
 #pragma once
-#include "Eruption/Core/Assert.h"
-#include "Eruption/Core/Base.h"
 #include "Eruption/Core/Events/Event.h"
 
 #include <algorithm>
@@ -10,87 +8,59 @@
 
 namespace Eruption
 {
-	template <typename TEvent>
-	concept CEvent = std::is_base_of_v<Event, TEvent>;
-
-	template <typename TCallable, typename TEvent>
-	concept CEventCallback = requires(TCallable callback, TEvent& event) {
-		{ callback(event) } -> std::same_as<bool>;
-	};
-
-	class IEventHandler
+	class IEventDispatcher
 	{
 	public:
-		virtual ~IEventHandler() = default;
+		virtual ~IEventDispatcher() = default;
 
-		virtual bool Invoke(Event& event) = 0;
+		[[nodiscard]] virtual bool Dispatch(Event& event) = 0;
 
-		virtual uint32_t GetPriority() const = 0;
+		[[nodiscard]] virtual uint32_t GetPriority() const = 0;
 	};
 
 	template <CEvent TEvent, CEventCallback<TEvent> TEventCallback>
-	class TEventHandler : public IEventHandler
+	class TEventDispatcher : public IEventDispatcher
 	{
 	public:
-		TEventHandler(TEventCallback&& callback, uint32_t priority) :
+		TEventDispatcher(TEventCallback&& callback, uint32_t priority) :
 		    m_Callback(std::forward<TEventCallback>(callback)), m_Priority(priority)
 		{}
 
-		bool Invoke(Event& event) override
+		[[nodiscard]] bool Dispatch(Event& event) override
 		{
-			if (event.GetEventType() == TEvent::GetStaticType() && !event.Handled)
+			if (event.GetEventType() == TEvent::GetStaticType() && !event.IsHandled)
 			{
-				event.Handled |= Callback(static_cast<TEvent&>(event));
+				event.IsHandled = m_Callback(static_cast<TEvent&>(event));
+				return true;
 			}
 
-			return event.Handled;
+			return false;
 		}
 
-		uint32_t GetPriority() const override { return m_Priority; }
+		[[nodiscard]] uint32_t GetPriority() const override { return m_Priority; }
 
 	private:
 		TEventCallback m_Callback;
-		uint32_t       m_Priority = 0u;
+		uint32_t       m_Priority = 0;
 	};
 
 	class EventBus
 	{
 	public:
-		EventBus()  = default;
-		~EventBus() = default;
-
 		template <CEvent TEvent, CEventCallback<TEvent> TEventCallback>
 		void Subscribe(TEventCallback&& callback, uint32_t priority = 0)
 		{
-			auto& handlers = m_Handlers[TEvent::GetStaticType()];
+			auto& handlers = m_Dispatchers[TEvent::GetStaticType()];
 
-			auto handler = CreateScope<TEventHandler>(std::forward<TEventCallback>(callback), priority);
+			auto handler = CreateScope<TEventDispatcher<TEvent, TEventCallback>>(
+			    std::forward<TEventCallback>(callback), priority
+			);
 
-			// Insert sorted by priority (descending order)
 			auto insertIt = std::ranges::lower_bound(
-			    handlers,
-			    priority,
-			    [](const auto& handler, uint32_t prio) { return handler->GetPriority() > prio; },
-			    &IEventHandler::GetPriority
+			    handlers, priority, std::greater<>{}, [](const Scope<IEventDispatcher>& h) { return h->GetPriority(); }
 			);
 
 			handlers.insert(insertIt, std::move(handler));
-		}
-
-		template <CEvent TEvent>
-		bool Publish(TEvent& event)
-		{
-			auto it = m_Handlers.find(event.GetEventType());
-			if (it == m_Handlers.end())
-				return false;
-
-			for (auto& handler : it->second)
-			{
-				if (handler->Invoke(event))
-					return true;
-			}
-
-			return event.Handled;
 		}
 
 		template <CEvent TEvent>
@@ -102,43 +72,43 @@ namespace Eruption
 		void ProcessQueue()
 		{
 			for (auto& event : m_EventQueue)
-			{
-				PublishDynamic(*event);
-			}
+				Handle(*event);
 
 			m_EventQueue.clear();
 		}
 
 		void Clear()
 		{
-			m_Handlers.clear();
+			m_Dispatchers.clear();
 			m_EventQueue.clear();
 		}
 
-		void Clear(EventType type) { m_Handlers.erase(type); }
+		void Clear(EventType type) { m_Dispatchers.erase(type); }
 
 		size_t GetHandlerCount(EventType type) const
 		{
-			const auto it = m_Handlers.find(type);
-			return it != m_Handlers.end() ? it->second.size() : 0;
+			const auto it = m_Dispatchers.find(type);
+			return it != m_Dispatchers.end() ? it->second.size() : 0;
 		}
 
 	private:
-		void PublishDynamic(Event& event)
+		void Handle(Event& event)
 		{
-			const auto it = m_Handlers.find(event.GetEventType());
-			if (it == m_Handlers.end())
+			const auto it = m_Dispatchers.find(event.GetEventType());
+			if (it == m_Dispatchers.end())
 				return;
 
-			for (auto& handler : it->second)
+			for (auto& dispatcher : std::views::reverse(it->second))
 			{
-				if (handler->Invoke(event))
+				if (event.IsHandled)
 					return;
+
+				std::ignore = dispatcher->Dispatch(event);
 			}
 		}
 
 	private:
-		std::unordered_map<EventType, std::vector<Scope<IEventHandler>>> m_Handlers;
-		std::vector<Scope<Event>>                                        m_EventQueue;
+		std::unordered_map<EventType, std::vector<Scope<IEventDispatcher>>> m_Dispatchers;
+		std::vector<Scope<Event>>                                           m_EventQueue;
 	};
 }        // namespace Eruption

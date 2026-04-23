@@ -1,82 +1,57 @@
 #pragma once
-#include "Eruption/Platform/Vulkan/Vulkan.h"
-
-#include "Eruption/Renderer/RendererContext.h"
-
 #include <GLFW/glfw3.h>
 
 #include <string>
 
 namespace Eruption
 {
-	class VulkanSwapChain;
-
 	struct WindowSpecification
 	{
 		std::string Title      = "Eruption";
 		uint32_t    Width      = 1600;
 		uint32_t    Height     = 900;
 		bool        Fullscreen = false;
-		bool        VSync      = true;
+
+		using EventCallbackFn = std::function<void(Event&)>;
+		EventCallbackFn EventCallback;
 	};
 
 	class Window
 	{
 	public:
-		using EventCallbackFn = std::function<void(Event&)>;
-
-	public:
 		explicit Window(const WindowSpecification& specification);
-		virtual ~Window();
+		~Window();
 
-		virtual void Init();
-		virtual void ProcessEvents();
-		virtual void SwapBuffers();
+		void ProcessEvents();
+		void SwapBuffers() const;
 
-		virtual void SetTitle(const std::string& title);
-		virtual void SetResizable(bool resizable) const;
-		virtual void SetVSync(bool enabled);
+		void SetTitle(const std::string& title);
+		void SetResizable(bool resizable) const;
 
-		virtual void Maximize();
-		virtual void CenterWindow();
+		void Maximize() const;
+		void Restore() const;
+		void CenterWindow() const;
 
-		void SetEventCallback(const EventCallbackFn& callback) { m_Data.EventCallback = callback; }
+		void RaiseEvent(Event& event) const;
 
-		[[nodiscard]] uint32_t GetWidth() const { return m_Data.Width; }
-		[[nodiscard]] uint32_t GetHeight() const { return m_Data.Height; }
+		[[nodiscard]] uint32_t GetWidth() const { return m_Specification.Width; }
+		[[nodiscard]] uint32_t GetHeight() const { return m_Specification.Height; }
 
-		[[nodiscard]] virtual std::pair<uint32_t, uint32_t> GetSize() const { return {m_Data.Width, m_Data.Height}; }
+		[[nodiscard]] std::pair<uint32_t, uint32_t> GetFramebufferSize() const;
 
-		[[nodiscard]] virtual std::pair<float, float> GetWindowPos() const;
+		[[nodiscard]] std::pair<float, float> GetWindowPos() const;
 
-		[[nodiscard]] virtual bool IsVSync() const { return m_Specification.VSync; }
+		[[nodiscard]] const std::string& GetTitle() const { return m_Specification.Title; }
 
-		[[nodiscard]] virtual const std::string& GetTitle() const { return m_Data.Title; }
-
-		[[nodiscard]] virtual Ref<RendererContext> GetRendererContext() const { return m_RendererContext; }
-		[[nodiscard]] void*                        GetNativeWindow() const { return m_Window; }
-
-	public:
-		static Window* Create(const WindowSpecification& specification = WindowSpecification{});
+		[[nodiscard]] const GLFWwindow* GetNativeWindow() const { return m_Window; }
+		[[nodiscard]] GLFWwindow*       GetNativeWindow() { return m_Window; }
 
 	private:
-		virtual void Shutdown();
+		void SetCallbacks() const;
 
 	private:
 		WindowSpecification m_Specification;
 
-		struct WindowData
-		{
-			std::string     Title;
-			uint32_t        Width, Height;
-			EventCallbackFn EventCallback;
-		} m_Data;
-
-		Ref<RendererContext>   m_RendererContext;
-		Scope<VulkanSwapChain> m_SwapChain;
-
-		GLFWwindow* m_Window;
-
-		float m_LastFrameTime = 0.0f;
+		GLFWwindow* m_Window = nullptr;
 	};
 }        // namespace Eruption

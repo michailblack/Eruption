@@ -2,42 +2,40 @@
 
 #include "Eruption/Core/Input.h"
 #include "Eruption/Core/Timer.h"
-
 #include "Eruption/Renderer/Renderer.h"
 
 #include <glm/ext/scalar_common.hpp>
 
 namespace Eruption
 {
-	Application* Application::s_Instance = nullptr;
+	static Application* s_Application = nullptr;
 
 	Application::Application(const ApplicationSpecification& specification) : m_Specification(specification)
 	{
 		Log::Init();
 
-		s_Instance = this;
+		s_Application = this;
 
 		if (!specification.WorkingDirectory.empty())
 			std::filesystem::current_path(specification.WorkingDirectory);
 
 		WindowSpecification windowSpec;
-		windowSpec.Title      = specification.Name;
-		windowSpec.Width      = specification.WindowWidth;
-		windowSpec.Height     = specification.WindowHeight;
-		windowSpec.Fullscreen = specification.Fullscreen;
-		windowSpec.VSync      = specification.VSync;
+		windowSpec.Title         = specification.Name;
+		windowSpec.Width         = specification.WindowWidth;
+		windowSpec.Height        = specification.WindowHeight;
+		windowSpec.Fullscreen    = specification.Fullscreen;
+		windowSpec.EventCallback = [this](Event& event) { RaiseEvent(event); };
 
-		m_Window = std::unique_ptr<Window>(Window::Create(windowSpec));
-		m_Window->Init();
-
-		// Init renderer and execute command queue to compile all shaders
-		// Renderer::Init();
+		m_Window = CreateScope<Window>(windowSpec);
 
 		if (specification.StartMaximized)
 			m_Window->Maximize();
 		else
 			m_Window->CenterWindow();
+
 		m_Window->SetResizable(specification.Resizable);
+
+		Renderer::Init(m_Window);
 	}
 
 	Application::~Application()
@@ -49,27 +47,20 @@ namespace Eruption
 	{
 		OnInit();
 
-		while (m_Running)
-		{
-			static uint64_t s_FrameCounter = 0;
+		m_IsRunning = true;
 
+		while (m_IsRunning)
+		{
 			ProcessEvents();
 
 			if (!m_Minimized)
 			{
-				Timer cpuTimer;
-
 				HandledQueuedEvents();
 
-				for (Layer* layer : m_LayerStack)
-				{
-					if (layer->IsEnabled())
-						layer->OnUpdate(m_DeltaTime);
-				}
+				for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+					layer->OnUpdate(m_DeltaTime);
 
 				m_Window->SwapBuffers();
-
-				m_CurrentFrameIndex = (m_CurrentFrameIndex + 1) % Renderer::GetConfig().FramesInFlight;
 			}
 
 			Input::ClearReleasedKeys();
@@ -78,20 +69,25 @@ namespace Eruption
 			m_FrameTime      = time - m_LastFrameTime;
 			m_DeltaTime      = glm::min<float>(m_FrameTime, 0.0333f);
 			m_LastFrameTime  = time;
-
-			++s_FrameCounter;
 		}
 
 		OnShutdown();
 	}
 
-	void Application::Close()
+	void Application::Stop()
 	{
-		m_Running = false;
+		m_IsRunning = false;
 	}
 
-	void Application::OnShutdown()
-	{}
+	void Application::RaiseEvent(Event& event)
+	{
+		for (const std::unique_ptr<Layer>& layer : std::views::reverse(m_LayerStack))
+		{
+			layer->OnEvent(event);
+			if (event.IsHandled)
+				break;
+		}
+	}
 
 	void Application::ProcessEvents() const
 	{
@@ -102,7 +98,7 @@ namespace Eruption
 	}
 	void Application::HandledQueuedEvents()
 	{
-		m_EventBus.ProcessQueue();
+		// m_EventBus.ProcessQueue();
 	}
 
 	float Application::GetTime()
@@ -110,46 +106,10 @@ namespace Eruption
 		return static_cast<float>(glfwGetTime());
 	}
 
-	void Application::OnEvent(Event& event)
+	Application& Application::Get()
 	{
-		for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
-		{
-			if (event.Handled)
-				break;
-
-			if ((*it)->IsEnabled())
-				(*it)->OnEvent(event);
-		}
-
-		if (!event.Handled)
-		{
-			EventDispatcher dispatcher(event);
-			dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& e) { return OnWindowResize(e); });
-			dispatcher.Dispatch<WindowMinimizeEvent>([this](WindowMinimizeEvent& e) { return OnWindowMinimize(e); });
-			dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& e) { return OnWindowClose(e); });
-		}
-
-		ER_CORE_ASSERT(event.Handled);
-	}
-
-	void Application::PushLayer(Layer* layer)
-	{
-		m_LayerStack.PushLayer(layer);
-	}
-
-	void Application::PushOverlay(Layer* layer)
-	{
-		m_LayerStack.PushOverlay(layer);
-	}
-
-	void Application::PopLayer(Layer* layer)
-	{
-		m_LayerStack.PopLayer(layer);
-	}
-
-	void Application::PopOverlay(Layer* layer)
-	{
-		m_LayerStack.PopOverlay(layer);
+		ER_CORE_ASSERT(s_Application);
+		return *s_Application;
 	}
 
 	bool Application::OnWindowResize(WindowResizeEvent& e)
@@ -169,7 +129,7 @@ namespace Eruption
 
 	bool Application::OnWindowClose(WindowCloseEvent& e)
 	{
-		Close();
+		Stop();
 		return false;        // give other things a chance to react to window close
 	}
 }        // namespace Eruption

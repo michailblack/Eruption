@@ -1,8 +1,6 @@
 #include "Vulkan.h"
 
-#include "Eruption/Platform/Vulkan/VulkanContext.h"
-
-namespace Eruption::VulkanUtils
+namespace Eruption::Vulkan::Utils
 {
 	void CheckResult(vk::Result result, const char* file, int line)
 	{
@@ -12,15 +10,15 @@ namespace Eruption::VulkanUtils
 			ER_CORE_ASSERT(false);
 		}
 	}
+
 	void SetDebugUtilsObjectName(
-	    vk::Device device, vk::ObjectType objectType, const void* handle, std::string_view name
+	    const vk::raii::Device& device, vk::ObjectType objectType, const void* handle, std::string_view name
 	)
 	{
-		vk::DebugUtilsObjectNameInfoEXT nameInfo{};
-		nameInfo.objectType   = objectType;
-		nameInfo.objectHandle = reinterpret_cast<uint64_t>(handle);
-		nameInfo.pObjectName  = name.data();
+		const vk::DebugUtilsObjectNameInfoEXT debugNameInfo{
+		    .objectType = objectType, .objectHandle = reinterpret_cast<uint64_t>(handle), .pObjectName = name.data()
+		};
 
-		device.setDebugUtilsObjectNameEXT(nameInfo, *VulkanContext::Get()->GetDLD());
+		device.setDebugUtilsObjectNameEXT(debugNameInfo);
 	}
-}        // namespace Eruption::VulkanUtils
+}        // namespace Eruption::Vulkan::Utils

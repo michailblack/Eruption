@@ -1,10 +1,7 @@
 #pragma once
-#include <spdlog/spdlog.h>
+#include "Eruption/Core/Base.h"
 
-#include <cstdint>
-#include <format>
-#include <map>
-#include <memory>
+#include <spdlog/spdlog.h>
 
 namespace Eruption
 {
@@ -35,31 +32,30 @@ namespace Eruption
 		static void Init();
 		static void Shutdown();
 
-		static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
+		static const Ref<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
 
 		static bool HasTag(const std::string& tag) { return s_EnabledTags.contains(tag); }
 
 		static std::map<std::string, TagDetails>& EnabledTags() { return s_EnabledTags; }
 
 		template <typename... Args>
-		static void PrintMessage(Type type, Level level, std::format_string<Args...> format, Args&&... args);
+		static void PrintMessage(Type type, Level level, fmt::format_string<Args...> format, Args&&... args);
 
 		template <typename... Args>
 		static void PrintMessageTag(
-		    Type type, Level level, std::string_view tag, std::format_string<Args...> format, Args&&... args
+		    Type type, Level level, std::string_view tag, fmt::format_string<Args...> format, Args&&... args
 		);
 
 		static void PrintMessageTag(Type type, Level level, std::string_view tag, std::string_view message);
 
 		template <typename... Args>
 		static void PrintAssertMessage(
-		    Type type, std::string_view prefix, std::format_string<Args...> message, Args&&... args
+		    Type type, std::string_view prefix, fmt::format_string<Args...> message, Args&&... args
 		);
 
 		static void PrintAssertMessage(Type type, std::string_view prefix);
 
 	public:
-		// Enum utils
 		static const char* LevelToString(Level level)
 		{
 			switch (level)
@@ -89,41 +85,13 @@ namespace Eruption
 		}
 
 	private:
-		inline static std::shared_ptr<spdlog::logger> s_CoreLogger;
+		inline static Ref<spdlog::logger> s_CoreLogger;
 
 		inline static std::map<std::string, TagDetails> s_EnabledTags;
 	};
 
-}        // namespace Eruption
-
-// Core logging
-#define ER_CORE_TRACE_TAG(tag, ...) \
-	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Trace, tag, __VA_ARGS__)
-#define ER_CORE_INFO_TAG(tag, ...) \
-	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Info, tag, __VA_ARGS__)
-#define ER_CORE_WARN_TAG(tag, ...) \
-	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Warn, tag, __VA_ARGS__)
-#define ER_CORE_ERROR_TAG(tag, ...) \
-	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Error, tag, __VA_ARGS__)
-#define ER_CORE_FATAL_TAG(tag, ...) \
-	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Fatal, tag, __VA_ARGS__)
-
-// Core Logging
-#define ER_CORE_TRACE(...) \
-	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Trace, __VA_ARGS__)
-#define ER_CORE_INFO(...) \
-	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Info, __VA_ARGS__)
-#define ER_CORE_WARN(...) \
-	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Warn, __VA_ARGS__)
-#define ER_CORE_ERROR(...) \
-	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Error, __VA_ARGS__)
-#define ER_CORE_FATAL(...) \
-	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Fatal, __VA_ARGS__)
-
-namespace Eruption
-{
 	template <typename... Args>
-	void Log::PrintMessage(Log::Type type, Log::Level level, std::format_string<Args...> format, Args&&... args)
+	void Log::PrintMessage(Type type, Level level, fmt::format_string<Args...> format, Args&&... args)
 	{
 		const auto detail = s_EnabledTags[""];
 		if (detail.Enabled && detail.LevelFilter <= level)
@@ -142,14 +110,14 @@ namespace Eruption
 
 	template <typename... Args>
 	void Log::PrintMessageTag(
-	    Log::Type type, Log::Level level, std::string_view tag, const std::format_string<Args...> format, Args&&... args
+	    Type type, Level level, std::string_view tag, fmt::format_string<Args...> format, Args&&... args
 	)
 	{
-		auto detail = s_EnabledTags[std::string(tag)];
+		const auto detail = s_EnabledTags[std::string(tag)];
 		if (detail.Enabled && detail.LevelFilter <= level)
 		{
 			const auto  logger    = GetCoreLogger();
-			std::string formatted = std::format(format, std::forward<Args>(args)...);
+			std::string formatted = fmt::format(format, std::forward<Args>(args)...);
 			switch (level)
 			{
 				case Level::Trace: logger->trace("[{0}] {1}", tag, formatted); break;
@@ -161,9 +129,9 @@ namespace Eruption
 		}
 	}
 
-	inline void Log::PrintMessageTag(Log::Type type, Log::Level level, std::string_view tag, std::string_view message)
+	inline void Log::PrintMessageTag(Type type, Level level, std::string_view tag, std::string_view message)
 	{
-		auto detail = s_EnabledTags[std::string(tag)];
+		const auto detail = s_EnabledTags[std::string(tag)];
 		if (detail.Enabled && detail.LevelFilter <= level)
 		{
 			const auto logger = GetCoreLogger();
@@ -180,11 +148,11 @@ namespace Eruption
 
 	template <typename... Args>
 	void Log::PrintAssertMessage(
-	    Log::Type type, std::string_view prefix, std::format_string<Args...> message, Args&&... args
+	    Type type, std::string_view prefix, fmt::format_string<Args...> message, Args&&... args
 	)
 	{
 		const auto logger    = GetCoreLogger();
-		auto       formatted = std::format(message, std::forward<Args>(args)...);
+		auto       formatted = fmt::format(message, std::forward<Args>(args)...);
 		logger->error("{0}: {1}", prefix, formatted);
 	}
 
@@ -194,3 +162,25 @@ namespace Eruption
 		logger->error("{0}", prefix);
 	}
 }        // namespace Eruption
+
+#define ER_CORE_TRACE_TAG(tag, ...) \
+	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Trace, tag, __VA_ARGS__)
+#define ER_CORE_INFO_TAG(tag, ...) \
+	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Info, tag, __VA_ARGS__)
+#define ER_CORE_WARN_TAG(tag, ...) \
+	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Warn, tag, __VA_ARGS__)
+#define ER_CORE_ERROR_TAG(tag, ...) \
+	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Error, tag, __VA_ARGS__)
+#define ER_CORE_FATAL_TAG(tag, ...) \
+	::Eruption::Log::PrintMessageTag(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Fatal, tag, __VA_ARGS__)
+
+#define ER_CORE_TRACE(...) \
+	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Trace, __VA_ARGS__)
+#define ER_CORE_INFO(...) \
+	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Info, __VA_ARGS__)
+#define ER_CORE_WARN(...) \
+	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Warn, __VA_ARGS__)
+#define ER_CORE_ERROR(...) \
+	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Error, __VA_ARGS__)
+#define ER_CORE_FATAL(...) \
+	::Eruption::Log::PrintMessage(::Eruption::Log::Type::Core, ::Eruption::Log::Level::Fatal, __VA_ARGS__)

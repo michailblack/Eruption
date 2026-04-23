@@ -60,10 +60,8 @@ namespace Eruption
 
 	std::pair<float, float> Input::GetMousePosition()
 	{
-		const auto& window = static_cast<Window&>(Application::Get().GetWindow());
-
 		double x, y;
-		glfwGetCursorPos(static_cast<GLFWwindow*>(window.GetNativeWindow()), &x, &y);
+		glfwGetCursorPos(static_cast<GLFWwindow*>(Application::Get().GetWindow()->GetNativeWindow()), &x, &y);
 		return {static_cast<float>(x), static_cast<float>(y)};
 	}
 

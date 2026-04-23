@@ -6,40 +6,17 @@
 
 #include "Eruption/Core/Input.h"
 
-#include "Eruption/Platform/Vulkan/VulkanContext.h"
-#include "Eruption/Platform/Vulkan/VulkanSwapChain.h"
-
-#include "Eruption/Renderer/RendererAPI.h"
-
 namespace Eruption
 {
-	static bool s_GLFWInitialized{false};
+	static bool s_GLFWInitialized = false;
 
 	static void GLFWErrorCallback(int error, const char* description)
 	{
 		ER_CORE_ERROR_TAG("GLFW", "GLFW Error ({0}): {1}", error, description);
 	}
 
-	Window* Window::Create(const WindowSpecification& specification)
+	Window::Window(const WindowSpecification& specification) : m_Specification(specification)
 	{
-		return new Window(specification);
-	}
-
-	Window::Window(const WindowSpecification& specification) :
-	    m_Specification(specification), m_Data(), m_Window(nullptr)
-	{}
-
-	Window::~Window()
-	{
-		Window::Shutdown();
-	}
-
-	void Window::Init()
-	{
-		m_Data.Title  = m_Specification.Title;
-		m_Data.Width  = m_Specification.Width;
-		m_Data.Height = m_Specification.Height;
-
 		ER_CORE_INFO_TAG(
 		    "GLFW",
 		    "Creating window {0} ({1}, {2})",
@@ -50,7 +27,6 @@ namespace Eruption
 
 		if (!s_GLFWInitialized)
 		{
-			// TODO: glfwTerminate on system shutdown
 			const int success = glfwInit();
 			ER_CORE_ASSERT(success, "Could not initialize GLFW!");
 			glfwSetErrorCallback(GLFWErrorCallback);
@@ -58,8 +34,7 @@ namespace Eruption
 			s_GLFWInitialized = true;
 		}
 
-		if (RendererAPI::GetAPI() == RendererAPI::Type::Vulkan)
-			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
 		if (m_Specification.Fullscreen)
 		{
@@ -72,59 +47,72 @@ namespace Eruption
 			glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
 			glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-			m_Window = glfwCreateWindow(mode->width, mode->height, m_Data.Title.c_str(), primaryMonitor, nullptr);
+			m_Window = glfwCreateWindow(
+			    mode->width, mode->height, m_Specification.Title.c_str(), primaryMonitor, nullptr
+			);
 		}
 		else
 		{
 			m_Window = glfwCreateWindow(
 			    static_cast<int>(m_Specification.Width),
 			    static_cast<int>(m_Specification.Height),
-			    m_Data.Title.c_str(),
+			    m_Specification.Title.c_str(),
 			    nullptr,
 			    nullptr
 			);
 		}
 
-		// Create Renderer Context
-		m_RendererContext = RendererContext::Create();
-		m_RendererContext->Create(m_Window);
-
-		auto vulkanContext = As<VulkanContext>(m_RendererContext);
-
-		SwapChainSpecification swapChainSpecification{};
-		swapChainSpecification.Surface              = vulkanContext->GetSurface();
-		swapChainSpecification.DesiredExtent.width  = m_Specification.Width;
-		swapChainSpecification.DesiredExtent.height = m_Specification.Height;
-
-		m_SwapChain = CreateScope<VulkanSwapChain>(swapChainSpecification);
-
-		// glfwMaximizeWindow(m_Window);
-		glfwSetWindowUserPointer(m_Window, &m_Data);
+		glfwSetWindowUserPointer(m_Window, this);
 
 		if (glfwRawMouseMotionSupported())
 			glfwSetInputMode(m_Window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 		else
 			ER_CORE_WARN_TAG("Platform", "Raw mouse motion not supported.");
 
-		// Set GLFW callbacks
+		SetCallbacks();
+
+		// Update window size to actual size
+		{
+			int width, height;
+			glfwGetWindowSize(m_Window, &width, &height);
+			m_Specification.Width  = width;
+			m_Specification.Height = height;
+		}
+	}
+
+	Window::~Window()
+	{
+		if (m_Window)
+		{
+			glfwDestroyWindow(m_Window);
+			m_Window = nullptr;
+		}
+
+		glfwTerminate();
+		s_GLFWInitialized = false;
+	}
+
+	void Window::SetCallbacks() const
+	{
 		glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
-			auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+			wnd.m_Specification.Width  = width;
+			wnd.m_Specification.Height = height;
 
 			WindowResizeEvent event(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
-			data.Width  = width;
-			data.Height = height;
-			data.EventCallback(event);
+			wnd.RaiseEvent(event);
 		});
 
 		glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window) {
-			const auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
 			WindowCloseEvent event;
-			data.EventCallback(event);
+			wnd.RaiseEvent(event);
 		});
 
 		glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-			const auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 			switch (action)
 			{
 				case GLFW_PRESS:
@@ -132,7 +120,7 @@ namespace Eruption
 					Input::UpdateKeyState(static_cast<KeyCode>(key), KeyState::Pressed);
 
 					KeyPressedEvent event(static_cast<KeyCode>(key), 0);
-					data.EventCallback(event);
+					wnd.RaiseEvent(event);
 					break;
 				}
 				case GLFW_RELEASE:
@@ -140,7 +128,7 @@ namespace Eruption
 					Input::UpdateKeyState(static_cast<KeyCode>(key), KeyState::Released);
 
 					KeyReleasedEvent event(static_cast<KeyCode>(key));
-					data.EventCallback(event);
+					wnd.RaiseEvent(event);
 					break;
 				}
 				case GLFW_REPEAT:
@@ -148,21 +136,21 @@ namespace Eruption
 					Input::UpdateKeyState(static_cast<KeyCode>(key), KeyState::Held);
 
 					KeyPressedEvent event(static_cast<KeyCode>(key), 1);
-					data.EventCallback(event);
+					wnd.RaiseEvent(event);
 					break;
 				}
 			}
 		});
 
 		glfwSetCharCallback(m_Window, [](GLFWwindow* window, uint32_t codepoint) {
-			const auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
 			KeyTypedEvent event(static_cast<KeyCode>(codepoint));
-			data.EventCallback(event);
+			wnd.RaiseEvent(event);
 		});
 
 		glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods) {
-			const auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 			switch (action)
 			{
 				case GLFW_PRESS:
@@ -170,7 +158,7 @@ namespace Eruption
 					Input::UpdateButtonState(static_cast<MouseButton>(button), KeyState::Pressed);
 
 					MouseButtonPressedEvent event(static_cast<MouseButton>(button));
-					data.EventCallback(event);
+					wnd.RaiseEvent(event);
 					break;
 				}
 				case GLFW_RELEASE:
@@ -178,44 +166,25 @@ namespace Eruption
 					Input::UpdateButtonState(static_cast<MouseButton>(button), KeyState::Released);
 
 					MouseButtonReleasedEvent event(static_cast<MouseButton>(button));
-					data.EventCallback(event);
+					wnd.RaiseEvent(event);
 					break;
 				}
 			}
 		});
 
 		glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xOffset, double yOffset) {
-			const auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
 			MouseScrolledEvent event(static_cast<float>(xOffset), static_cast<float>(yOffset));
-			data.EventCallback(event);
+			wnd.RaiseEvent(event);
 		});
 
 		glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double x, double y) {
-			const auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
 			MouseMovedEvent event(static_cast<float>(x), static_cast<float>(y));
-			data.EventCallback(event);
+			wnd.RaiseEvent(event);
 		});
-
-		// Update window size to actual size
-		{
-			int width, height;
-			glfwGetWindowSize(m_Window, &width, &height);
-			m_Data.Width  = width;
-			m_Data.Height = height;
-		}
-	}
-
-	void Window::Shutdown()
-	{
-		// m_SwapChain->Destroy();
-		// hdelete m_SwapChain;
-		// m_RendererContext.As<VulkanContext>()->GetDevice()->Destroy(
-		// );        // need to destroy the device _before_ windows window destructor destroys the renderer context
-		//           // (because device Destroy() asks for renderer context...)
-		glfwTerminate();
-		s_GLFWInitialized = false;
 	}
 
 	void Window::ProcessEvents()
@@ -223,13 +192,15 @@ namespace Eruption
 		glfwPollEvents();
 	}
 
-	void Window::SwapBuffers()
-	{}
+	void Window::SwapBuffers() const
+	{
+		glfwSwapBuffers(m_Window);
+	}
 
 	void Window::SetTitle(const std::string& title)
 	{
-		m_Data.Title = title;
-		glfwSetWindowTitle(m_Window, m_Data.Title.c_str());
+		m_Specification.Title = title;
+		glfwSetWindowTitle(m_Window, m_Specification.Title.c_str());
 	}
 
 	void Window::SetResizable(bool resizable) const
@@ -237,29 +208,38 @@ namespace Eruption
 		glfwSetWindowAttrib(m_Window, GLFW_RESIZABLE, resizable ? GLFW_TRUE : GLFW_FALSE);
 	}
 
-	void Window::SetVSync(bool enabled)
-	{
-		m_Specification.VSync = enabled;
-
-		// Application::Get().QueueEvent([&]() {
-		// 	m_SwapChain->SetVSync(m_Specification.VSync);
-		// 	m_SwapChain->OnResize(m_Specification.Width, m_Specification.Height);
-		// });
-	}
-
-	void Window::Maximize()
+	void Window::Maximize() const
 	{
 		glfwMaximizeWindow(m_Window);
 	}
 
-	void Window::CenterWindow()
+	void Window::Restore() const
+	{
+		glfwRestoreWindow(m_Window);
+	}
+
+	void Window::CenterWindow() const
 	{
 		const GLFWvidmode* videoMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 
-		const int x = (videoMode->width / 2) - (m_Data.Width / 2);
-		const int y = (videoMode->height / 2) - (m_Data.Height / 2);
+		const int x = (videoMode->width / 2) - (m_Specification.Width / 2);
+		const int y = (videoMode->height / 2) - (m_Specification.Height / 2);
 
 		glfwSetWindowPos(m_Window, x, y);
+	}
+
+	void Window::RaiseEvent(Event& event) const
+	{
+		if (m_Specification.EventCallback)
+			m_Specification.EventCallback(event);
+	}
+
+	std::pair<uint32_t, uint32_t> Window::GetFramebufferSize() const
+	{
+		int width, height;
+		glfwGetFramebufferSize(m_Window, &width, &height);
+
+		return {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 	}
 
 	std::pair<float, float> Window::GetWindowPos() const
