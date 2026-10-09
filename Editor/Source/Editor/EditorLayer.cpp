@@ -2,6 +2,7 @@
 
 #include "Eruption/Platform/Vulkan/Shader.h"
 #include "Eruption/Platform/Vulkan/Texture.h"
+#include "Eruption/Renderer/MeshImporter.h"
 #include "Eruption/Renderer/Renderer.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -17,6 +18,8 @@ namespace Eruption
 		m_Albedo   = Vulkan::Texture2D::CreateFlat({0.85f, 0.85f, 0.88f, 1.0f}, "DefaultAlbedo");
 		m_Material = m_SceneRenderer->CreateMaterial(m_Shader, m_Albedo);
 
+		// A model can be dropped in and loaded instead:
+		//   if (auto model = MeshImporter::Load(ER_ASSET_DIR "/Models/Suzanne.gltf")) m_Mesh = model->Geometry;
 		m_Mesh = Mesh::CreateCube();
 
 		m_Camera.SetPerspective(50.0f, 16.0f / 9.0f, 0.1f, 100.0f);

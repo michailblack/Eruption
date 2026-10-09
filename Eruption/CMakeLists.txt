@@ -15,7 +15,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/S
 target_link_libraries(
   ${PROJECT_NAME}
   PUBLIC Vulkan::cppm glm::glm glfw spdlog::spdlog EnTT::EnTT Threads::Threads
-  PRIVATE slang::slang Vendor::stb)
+  PRIVATE slang::slang assimp::assimp Vendor::stb)
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC GLFW_INCLUDE_NONE)
 

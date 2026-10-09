@@ -66,6 +66,7 @@ option(ENABLE_CPP20_MODULE "Enable C++20 module support for Vulkan-Hpp" OFF)
 # TODO: Use the packages as submodules
 find_package(Vulkan 1.3 REQUIRED)
 find_package(slang REQUIRED)
+find_package(assimp REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(spdlog REQUIRED)
