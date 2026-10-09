@@ -6,19 +6,17 @@
 
 namespace Eruption::Vulkan
 {
-	class Instance;
-	class PhysicalDevice;
-	class Device;
-
 	struct SwapChainSpecification
 	{
 		vk::Extent2D                  DesiredExtent;
+		uint32_t                      DesiredImageCount    = 3;
 		vk::Format                    PreferredFormat      = vk::Format::eB8G8R8A8Srgb;
 		vk::ColorSpaceKHR             PreferredColorSpace  = vk::ColorSpaceKHR::eSrgbNonlinear;
 		vk::PresentModeKHR            PreferredPresentMode = vk::PresentModeKHR::eMailbox;
 		vk::ImageUsageFlags           ImageUsage           = vk::ImageUsageFlagBits::eColorAttachment;
 		vk::CompositeAlphaFlagBitsKHR CompositeAlpha       = vk::CompositeAlphaFlagBitsKHR::eOpaque;
 		bool                          EnableClipping       = true;
+		bool                          VSync                = false;        // forces FIFO when true
 	};
 
 	struct SwapChainSupportDetails
@@ -31,23 +29,15 @@ namespace Eruption::Vulkan
 	class SwapChain
 	{
 	public:
-		explicit SwapChain(
-		    const Ref<Instance>&          instance,
-		    const Ref<PhysicalDevice>&    physicalDevice,
-		    const Ref<Device>&            device,
-		    const SwapChainSpecification& specification
-		);
-		~SwapChain();
+		explicit SwapChain(const SwapChainSpecification& specification);
+		~SwapChain() = default;
 
 		SwapChain(const SwapChain&)            = delete;
 		SwapChain& operator=(const SwapChain&) = delete;
 
-		SwapChain(SwapChain&&) noexcept            = default;
-		SwapChain& operator=(SwapChain&&) noexcept = default;
-
 		[[nodiscard]] std::expected<uint32_t, vk::Result> AcquireNextImage(
 		    vk::Semaphore signalSemaphore,
-		    vk::Fence     signalFence = VK_NULL_HANDLE,
+		    vk::Fence     signalFence = nullptr,
 		    uint64_t      timeout     = std::numeric_limits<uint64_t>::max()
 		);
 
@@ -64,40 +54,30 @@ namespace Eruption::Vulkan
 
 		[[nodiscard]] uint32_t GetImageCount() const { return static_cast<uint32_t>(m_Images.size()); }
 		[[nodiscard]] const std::vector<vk::Image>& GetImages() const { return m_Images; }
-
-		[[nodiscard]] const std::vector<vk::raii::ImageView>& GetImageViews() const { return m_ImageViews; }
-		[[nodiscard]] const vk::raii::ImageView& GetImageView(uint32_t index) const { return m_ImageViews[index]; }
-
-		[[nodiscard]] bool IsSuboptimal() const { return m_IsSuboptimal; }
+		[[nodiscard]] vk::Image                     GetImage(uint32_t index) const { return m_Images[index]; }
+		[[nodiscard]] const vk::raii::ImageView&    GetImageView(uint32_t index) const { return m_ImageViews[index]; }
 
 	private:
-		void Create(const Ref<Instance>& instance, const Ref<Device>& device);
-		void Destroy();
-		void CreateImageViews(const Ref<Device>& device);
+		void Create();
+		void CreateImageViews();
 
 		[[nodiscard]] vk::SurfaceFormatKHR ChooseSurfaceFormat() const;
 		[[nodiscard]] vk::PresentModeKHR   ChoosePresentMode() const;
 		[[nodiscard]] vk::Extent2D         ChooseExtent() const;
-		[[nodiscard]] uint32_t             ChooseMinImageCount() const;
+		[[nodiscard]] uint32_t             ChooseImageCount() const;
 
-		[[nodiscard]] static SwapChainSupportDetails QuerySupport(
-		    const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface
-		);
+		void QuerySupport();
 
 	private:
-		SwapChainSupportDetails m_SupportDetails;
 		SwapChainSpecification  m_Specification;
+		SwapChainSupportDetails m_SupportDetails;
 
 		vk::raii::SwapchainKHR m_SwapChain = nullptr;
 
 		std::vector<vk::Image>           m_Images;
 		std::vector<vk::raii::ImageView> m_ImageViews;
 
-		vk::Format   m_ImageFormat;
+		vk::Format   m_ImageFormat = vk::Format::eUndefined;
 		vk::Extent2D m_Extent;
-
-		uint32_t m_CurrentImageIndex = 0;
-
-		bool m_IsSuboptimal = false;
 	};
 }        // namespace Eruption::Vulkan

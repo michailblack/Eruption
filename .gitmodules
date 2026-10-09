@@ -1,15 +1,6 @@
-[submodule "Vendor/GLFW"]
-	path = Vendor/GLFW
-	url = git@github.com:glfw/glfw.git
-[submodule "Vendor/GLM"]
-	path = Vendor/GLM
-	url = git@github.com:g-truc/glm.git
-[submodule "Vendor/spdlog"]
-	path = Vendor/spdlog
-	url = git@github.com:gabime/spdlog.git
-[submodule "Vendor/VulkanMemoryAllocator"]
-	path = Vendor/VulkanMemoryAllocator
-	url = git@github.com:GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
 [submodule "Vendor/entt"]
 	path = Vendor/entt
 	url = git@github.com:skypjack/entt.git
+[submodule "Vendor/stb"]
+	path = Vendor/stb
+	url = git@github.com:nothings/stb.git

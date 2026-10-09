@@ -2,123 +2,94 @@
 
 #include "Eruption/Core/Window.h"
 
+#include <GLFW/glfw3.h>
+
 namespace Eruption::Vulkan
 {
+	namespace
+	{
 #ifdef ER_DEBUG
-	constexpr bool g_EnableValidationLayers = true;
-#elif
-	constexpr bool g_EnableValidationLayers = false;
+		constexpr bool g_EnableValidationLayers = true;
+#else
+		constexpr bool g_EnableValidationLayers = false;
 #endif
 
-	namespace Utils
-	{
-		namespace
+		VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugUtilsMessengerCallback(
+		    vk::DebugUtilsMessageSeverityFlagBitsEXT      severity,
+		    vk::DebugUtilsMessageTypeFlagsEXT             types,
+		    const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+		    [[maybe_unused]] void*                        pUserData
+		)
 		{
-			vk::Bool32 VulkanDebugUtilsMessengerCallback(
-			    vk::DebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
-			    vk::DebugUtilsMessageTypeFlagsEXT             messageTypes,
-			    const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-			    [[maybe_unused]] void*                        pUserData
-			)
+			std::string objects;
+			for (uint32_t i = 0; i < pCallbackData->objectCount; ++i)
 			{
-				std::string labels, objects;
-				if (pCallbackData->cmdBufLabelCount)
-				{
-					labels = std::format("\tLabels({}): \n", pCallbackData->cmdBufLabelCount);
-					for (uint32_t i = 0; i < pCallbackData->cmdBufLabelCount; ++i)
-					{
-						const auto&       label    = pCallbackData->pCmdBufLabels[i];
-						const std::string colorStr = std::format(
-						    "[ {}, {}, {}, {} ]", label.color[0], label.color[1], label.color[2], label.color[3]
-						);
-						labels.append(
-						    std::format(
-						        "\t\t- Command Buffer Label[{0}]: name: {1}, color: {2}\n",
-						        i,
-						        label.pLabelName ? label.pLabelName : "NULL",
-						        colorStr
-						    )
-						);
-					}
-				}
-
-				if (pCallbackData->objectCount)
-				{
-					objects = std::format("\tObjects({}): \n", pCallbackData->objectCount);
-					for (uint32_t i = 0; i < pCallbackData->objectCount; ++i)
-					{
-						const auto& object = pCallbackData->pObjects[i];
-						objects.append(
-						    std::format(
-						        "\t\t- Object[{0}] name: {1}, type: {2}, handle: {3:#x}\n",
-						        i,
-						        object.pObjectName ? object.pObjectName : "NULL",
-						        vk::to_string(object.objectType),
-						        object.objectHandle
-						    )
-						);
-					}
-				}
-
-				const std::string message = std::format(
-				    "{0} {1} message: \n\t{2}\n {3} {4}",
-				    vk::to_string(messageTypes),
-				    vk::to_string(messageSeverity),
-				    pCallbackData->pMessage,
-				    labels,
-				    objects
+				const vk::DebugUtilsObjectNameInfoEXT& object = pCallbackData->pObjects[i];
+				objects.append(
+				    std::format(
+				        "\n\t\tObject[{0}] type: {1}, handle: {2:#x}, name: {3}",
+				        i,
+				        vk::to_string(object.objectType),
+				        object.objectHandle,
+				        object.pObjectName ? object.pObjectName : "NULL"
+				    )
 				);
-
-				switch (messageSeverity)
-				{
-					case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
-						ER_CORE_TRACE_TAG("Validation", "{0}", message);
-						break;
-					case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
-						ER_CORE_INFO_TAG("Validation", "{0}", message);
-						break;
-					case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
-						ER_CORE_WARN_TAG("Validation", "{0}", message);
-						break;
-					case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
-						ER_CORE_ERROR_TAG("Validation", "{0}", message);
-						break;
-				}
-
-				return VK_FALSE;
 			}
-		}        // namespace
-	}        // namespace Utils
+
+			const std::string message = std::format(
+			    "{0}: {1}{2}", vk::to_string(types), pCallbackData->pMessage, objects
+			);
+
+			switch (severity)
+			{
+				case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
+					ER_CORE_TRACE_TAG("Vulkan", "{0}", message);
+					break;
+				case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo: ER_CORE_INFO_TAG("Vulkan", "{0}", message); break;
+				case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
+					ER_CORE_WARN_TAG("Vulkan", "{0}", message);
+					break;
+				case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
+					ER_CORE_ERROR_TAG("Vulkan", "{0}", message);
+					break;
+				default: break;
+			}
+
+			return VK_FALSE;
+		}
+	}        // namespace
 
 	Instance::Instance(const Scope<Window>& window)
 	{
-		ER_CORE_INFO_TAG("Renderer", "Instance::Create");
+		ER_CORE_INFO_TAG("Renderer", "Creating Vulkan instance (profile '{}')", s_Profile.profileName);
 
-		ER_CORE_ASSERT(glfwVulkanSupported(), "GLFW must support Vulkan!");
+		ER_CORE_ASSERT(glfwVulkanSupported(), "GLFW reports Vulkan is not supported on this system!");
 
 		constexpr VpCapabilitiesCreateInfo capabilitiesCreateInfo{
 		    .flags = VP_PROFILE_CREATE_STATIC_BIT, .apiVersion = VK_API_VERSION_1_4, .pVulkanFunctions = nullptr
 		};
-		vpCreateCapabilities(&capabilitiesCreateInfo, nullptr, &m_VpCapabilities);
+		VK_CHECK_RESULT(vpCreateCapabilities(&capabilitiesCreateInfo, nullptr, &m_VpCapabilities));
 
 		VkBool32 supported = VK_FALSE;
-		VK_CHECK_RESULT(vpGetInstanceProfileSupport(m_VpCapabilities, nullptr, &s_VpProfileProperties, &supported));
+		VK_CHECK_RESULT(vpGetInstanceProfileSupport(m_VpCapabilities, nullptr, &s_Profile, &supported));
 		if (!supported)
 		{
-			ER_CORE_FATAL("Required Vulkan profile '{}' is not supported!", VP_KHR_ROADMAP_2022_NAME);
-			ER_CORE_FATAL("Update your GPU drivers or check hardware requirements.");
+			ER_CORE_FATAL(
+			    "Required Vulkan profile '{}' is not supported at the instance level!", s_Profile.profileName
+			);
+			ER_CORE_FATAL("Update your GPU drivers / Vulkan runtime, or lower the target profile.");
 			ER_CORE_VERIFY(false);
 		}
 
-		const std::vector<const char*>& requiredExtensions = GetRequiredExtensions();
-		const std::vector<const char*>& requiredLayers     = GetRequiredLayers();
+		const std::vector<const char*> requiredExtensions = GetRequiredExtensions();
+		const std::vector<const char*> requiredLayers     = GetRequiredLayers();
 
 		constexpr vk::ApplicationInfo appInfo{
 		    .pApplicationName   = "Eruption",
-		    .applicationVersion = vk::makeApiVersion(0, 1, 0, 0),
+		    .applicationVersion = vk::makeApiVersion(0u, 1u, 0u, 0u),
 		    .pEngineName        = "Eruption",
-		    .engineVersion      = vk::makeApiVersion(0, 1, 0, 0),
-		    .apiVersion         = VP_KHR_ROADMAP_2026_MIN_API_VERSION
+		    .engineVersion      = vk::makeApiVersion(0u, 1u, 0u, 0u),
+		    .apiVersion         = VK_API_VERSION_1_4
 		};
 
 		const vk::InstanceCreateInfo instanceCreateInfo{
@@ -131,99 +102,73 @@ namespace Eruption::Vulkan
 		const VkInstanceCreateInfo rawInstanceCreateInfo = instanceCreateInfo;
 
 		const VpInstanceCreateInfo vpInstanceCreateInfo{
-		    .pCreateInfo              = &rawInstanceCreateInfo,
-		    .flags                    = 0,
-		    .enabledFullProfileCount  = 1,
-		    .pEnabledFullProfiles     = &s_VpProfileProperties,
-		    .enabledProfileBlockCount = 0,
-		    .pEnabledProfileBlocks    = nullptr
+		    .pCreateInfo = &rawInstanceCreateInfo, .enabledFullProfileCount = 1, .pEnabledFullProfiles = &s_Profile
 		};
 
-		VkInstance rawInstance;
+		VkInstance rawInstance = VK_NULL_HANDLE;
 		VK_CHECK_RESULT(vpCreateInstance(m_VpCapabilities, &vpInstanceCreateInfo, nullptr, &rawInstance));
 
 		m_Instance = vk::raii::Instance(m_Context, rawInstance);
 
 		CreateDebugUtilsMessenger();
-
 		CreateSurface(window);
 	}
 
 	Instance::~Instance()
 	{
-		// // m_Allocator->Destroy();
-		// m_Device->Destroy();
-		//
-		// m_VulkanInstance.destroy();
-		// m_VulkanInstance = VK_NULL_HANDLE;
-
 		if (m_VpCapabilities)
 			vpDestroyCapabilities(m_VpCapabilities, nullptr);
 	}
 
 	std::vector<const char*> Instance::GetRequiredExtensions() const
 	{
-		std::vector<const char*> requiredExtensions{};
+		uint32_t     glfwExtensionCount = 0;
+		const char** glfwExtensions     = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+		ER_CORE_ASSERT(glfwExtensions, "GLFW failed to report required Vulkan instance extensions!");
 
-		constexpr std::vector<const char*> requiredBaseExtensions{/*vk::KHRGetPhysicalDeviceProperties2ExtensionName*/};
-
-		uint32_t     glfwExtensionsCount = 0u;
-		const char** glfwExtensions      = glfwGetRequiredInstanceExtensions(&glfwExtensionsCount);
-
-		const std::vector<const char*> requiredGLFWExtension{glfwExtensions, glfwExtensions + glfwExtensionsCount};
-
-		requiredExtensions.reserve(requiredBaseExtensions.size() + requiredGLFWExtension.size());
-		requiredExtensions.append_range(requiredGLFWExtension);
-		requiredExtensions.append_range(requiredBaseExtensions);
+		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
 		if constexpr (g_EnableValidationLayers)
+			extensions.emplace_back(vk::EXTDebugUtilsExtensionName);
+
+		const std::vector<vk::ExtensionProperties> available = m_Context.enumerateInstanceExtensionProperties();
+		for (const char* required : extensions)
 		{
-			requiredExtensions.reserve(requiredExtensions.size() + 1);
-			requiredExtensions.emplace_back(vk::EXTDebugUtilsExtensionName);
+			const bool found = std::ranges::any_of(available, [required](const vk::ExtensionProperties& p) {
+				return std::strcmp(p.extensionName, required) == 0;
+			});
+
+			if (!found)
+				throw std::runtime_error(std::format("Required instance extension not supported: {}", required));
 		}
 
-		auto       extensionProperties    = m_Context.enumerateInstanceExtensionProperties();
-		const auto unsupportedExtensionIt = std::ranges::find_if(
-		    requiredExtensions, [&extensionProperties](const char* requiredExtension) -> bool {
-			    return std::ranges::none_of(
-			        extensionProperties, [requiredExtension](const vk::ExtensionProperties& extensionProperty) -> bool {
-				        return std::strcmp(extensionProperty.extensionName, requiredExtension) == 0;
-			        }
-			    );
-		    }
-		);
-
-		if (unsupportedExtensionIt != requiredExtensions.end())
-			throw std::runtime_error("Required extension not supported: " + std::string(*unsupportedExtensionIt));
-
-		return requiredExtensions;
+		return extensions;
 	}
 
 	std::vector<const char*> Instance::GetRequiredLayers() const
 	{
-		std::vector<const char*> requiredLayers{};
+		std::vector<const char*> layers;
 
 		if constexpr (g_EnableValidationLayers)
+			layers.emplace_back("VK_LAYER_KHRONOS_validation");
+
+		const std::vector<vk::LayerProperties> available = m_Context.enumerateInstanceLayerProperties();
+		for (const char* required : layers)
 		{
-			constexpr std::array validationLayers = {"VK_LAYER_KHRONOS_validation"};
-			requiredLayers.append_range(validationLayers);
+			const bool found = std::ranges::any_of(available, [required](const vk::LayerProperties& p) {
+				return std::strcmp(p.layerName, required) == 0;
+			});
+
+			if (!found)
+			{
+				ER_CORE_WARN_TAG(
+				    "Renderer", "Requested validation layer '{}' not available; continuing without it.", required
+				);
+				return {};
+			}
 		}
 
-		auto       layerProperties    = m_Context.enumerateInstanceLayerProperties();
-		const auto unsupportedLayerIt = std::ranges::find_if(
-		    requiredLayers, [&layerProperties](const char* requiredLayer) -> bool {
-			    return std::ranges::none_of(
-			        layerProperties, [requiredLayer](const vk::LayerProperties& layerProperty) -> bool {
-				        return strcmp(layerProperty.layerName, requiredLayer) == 0;
-			        }
-			    );
-		    }
-		);
-
-		if (unsupportedLayerIt != requiredLayers.end())
-			throw std::runtime_error("Required layer not supported: " + std::string(*unsupportedLayerIt));
-
-		return requiredLayers;
+		return layers;
 	}
 
 	void Instance::CreateDebugUtilsMessenger()
@@ -232,30 +177,27 @@ namespace Eruption::Vulkan
 			return;
 
 		constexpr vk::DebugUtilsMessageSeverityFlagsEXT
-		    severityFlags = /*vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose
-		 | vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |*/
-		    vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+		    severityFlags = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+		                    vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
 
-		constexpr vk::DebugUtilsMessageTypeFlagsEXT
-		    messageTypeFlags = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-		                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-		                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
+		constexpr vk::DebugUtilsMessageTypeFlagsEXT typeFlags = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+		                                                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+		                                                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
 
-		constexpr vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{
-		    .messageSeverity = severityFlags,
-		    .messageType     = messageTypeFlags,
-		    .pfnUserCallback = Utils::VulkanDebugUtilsMessengerCallback,
-		    .pUserData       = nullptr
+		const vk::DebugUtilsMessengerCreateInfoEXT createInfo{
+		    .messageSeverity = severityFlags, .messageType = typeFlags, .pfnUserCallback = DebugUtilsMessengerCallback
 		};
 
-		m_DebugMessenger = m_Instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
+#ifdef ER_DEBUG
+		m_DebugMessenger = m_Instance.createDebugUtilsMessengerEXT(createInfo);
+#endif
 	}
 
 	void Instance::CreateSurface(const Scope<Window>& window)
 	{
-		VkSurfaceKHR rawSurface;
+		VkSurfaceKHR rawSurface = VK_NULL_HANDLE;
 		if (glfwCreateWindowSurface(*m_Instance, window->GetNativeWindow(), nullptr, &rawSurface) != VK_SUCCESS)
-			throw std::runtime_error("Failed to create surface!");
+			throw std::runtime_error("Failed to create window surface!");
 
 		m_Surface = vk::raii::SurfaceKHR(m_Instance, rawSurface);
 	}

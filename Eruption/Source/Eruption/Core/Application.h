@@ -64,13 +64,14 @@ namespace Eruption
 
 	private:
 		void ProcessEvents() const;
-		void HandledQueuedEvents();
 
 		bool OnWindowResize(WindowResizeEvent& e);
 		bool OnWindowMinimize(WindowMinimizeEvent& e);
 		bool OnWindowClose(WindowCloseEvent& e);
 
 	private:
+		inline static Application* s_Instance = nullptr;
+
 		ApplicationSpecification m_Specification;
 
 		LayerStack m_LayerStack;

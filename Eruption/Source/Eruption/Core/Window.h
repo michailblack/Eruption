@@ -1,6 +1,9 @@
 #pragma once
+#include "Eruption/Core/Events/Event.h"
+
 #include <GLFW/glfw3.h>
 
+#include <functional>
 #include <string>
 
 namespace Eruption
@@ -23,7 +26,6 @@ namespace Eruption
 		~Window();
 
 		void ProcessEvents();
-		void SwapBuffers() const;
 
 		void SetTitle(const std::string& title);
 		void SetResizable(bool resizable) const;

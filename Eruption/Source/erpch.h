@@ -1,19 +1,23 @@
 #pragma once
 
 #include <algorithm>
-#include <csignal>
-#include <cstdarg>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <expected>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <print>
-#include <random>
 #include <ranges>
 #include <thread>
 #include <type_traits>
@@ -22,6 +26,7 @@
 #include <array>
 #include <map>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -29,5 +34,4 @@
 
 #include "Eruption/Core/Assert.h"
 #include "Eruption/Core/Base.h"
-#include "Eruption/Core/Events/Event.h"
 #include "Eruption/Core/Log.h"

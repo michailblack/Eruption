@@ -111,6 +111,13 @@ namespace Eruption
 			wnd.RaiseEvent(event);
 		});
 
+		glfwSetWindowIconifyCallback(m_Window, [](GLFWwindow* window, int iconified) {
+			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+			WindowMinimizeEvent event(iconified == GLFW_TRUE);
+			wnd.RaiseEvent(event);
+		});
+
 		glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
 			const auto& wnd = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 			switch (action)
@@ -192,11 +199,6 @@ namespace Eruption
 		glfwPollEvents();
 	}
 
-	void Window::SwapBuffers() const
-	{
-		glfwSwapBuffers(m_Window);
-	}
-
 	void Window::SetTitle(const std::string& title)
 	{
 		m_Specification.Title = title;
@@ -220,6 +222,10 @@ namespace Eruption
 
 	void Window::CenterWindow() const
 	{
+		// Wayland does not allow clients to position their own windows.
+		if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND)
+			return;
+
 		const GLFWvidmode* videoMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 
 		const int x = (videoMode->width / 2) - (m_Specification.Width / 2);

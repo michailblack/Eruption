@@ -1,20 +1,33 @@
 #include "Application.h"
 
 #include "Eruption/Core/Input.h"
-#include "Eruption/Core/Timer.h"
 #include "Eruption/Renderer/Renderer.h"
 
-#include <glm/ext/scalar_common.hpp>
+#include <algorithm>
+#include <atomic>
+#include <csignal>
 
 namespace Eruption
 {
-	static Application* s_Application = nullptr;
+	namespace
+	{
+		std::atomic_bool s_StopRequested = false;
+
+		extern "C" void SignalHandler(int)
+		{
+			s_StopRequested.store(true, std::memory_order_relaxed);
+		}
+	}        // namespace
 
 	Application::Application(const ApplicationSpecification& specification) : m_Specification(specification)
 	{
 		Log::Init();
 
-		s_Application = this;
+		std::signal(SIGINT, SignalHandler);
+		std::signal(SIGTERM, SignalHandler);
+
+		ER_CORE_ASSERT(!s_Instance, "Application already exists!");
+		s_Instance = this;
 
 		if (!specification.WorkingDirectory.empty())
 			std::filesystem::current_path(specification.WorkingDirectory);
@@ -35,11 +48,16 @@ namespace Eruption
 
 		m_Window->SetResizable(specification.Resizable);
 
-		Renderer::Init(m_Window);
+		Renderer::Init(m_Window, Renderer::Config{.VSync = specification.VSync});
 	}
 
 	Application::~Application()
 	{
+		Renderer::WaitIdle();
+		m_LayerStack.Clear();
+		Renderer::Shutdown();
+
+		s_Instance = nullptr;
 		Log::Shutdown();
 	}
 
@@ -48,26 +66,31 @@ namespace Eruption
 		OnInit();
 
 		m_IsRunning = true;
-
 		while (m_IsRunning)
 		{
+			if (s_StopRequested.load(std::memory_order_relaxed))
+				break;
+
 			ProcessEvents();
 
 			if (!m_Minimized)
 			{
-				HandledQueuedEvents();
+				Renderer::BeginFrame();
 
-				for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+				for (const Scope<Layer>& layer : m_LayerStack)
 					layer->OnUpdate(m_DeltaTime);
 
-				m_Window->SwapBuffers();
+				for (const Scope<Layer>& layer : m_LayerStack)
+					layer->OnRender();
+
+				Renderer::EndFrame();
 			}
 
 			Input::ClearReleasedKeys();
 
 			const float time = GetTime();
 			m_FrameTime      = time - m_LastFrameTime;
-			m_DeltaTime      = glm::min<float>(m_FrameTime, 0.0333f);
+			m_DeltaTime      = std::min(m_FrameTime.GetSeconds(), 0.0333f);
 			m_LastFrameTime  = time;
 		}
 
@@ -81,11 +104,17 @@ namespace Eruption
 
 	void Application::RaiseEvent(Event& event)
 	{
-		for (const std::unique_ptr<Layer>& layer : std::views::reverse(m_LayerStack))
+		EventDispatcher dispatcher(event);
+		dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& e) { return OnWindowResize(e); });
+		dispatcher.Dispatch<WindowMinimizeEvent>([this](WindowMinimizeEvent& e) { return OnWindowMinimize(e); });
+		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& e) { return OnWindowClose(e); });
+
+		for (const Scope<Layer>& layer : std::views::reverse(m_LayerStack))
 		{
-			layer->OnEvent(event);
 			if (event.IsHandled)
 				break;
+
+			layer->OnEvent(event);
 		}
 	}
 
@@ -96,10 +125,6 @@ namespace Eruption
 
 		m_Window->ProcessEvents();
 	}
-	void Application::HandledQueuedEvents()
-	{
-		// m_EventBus.ProcessQueue();
-	}
 
 	float Application::GetTime()
 	{
@@ -108,17 +133,19 @@ namespace Eruption
 
 	Application& Application::Get()
 	{
-		ER_CORE_ASSERT(s_Application);
-		return *s_Application;
+		ER_CORE_ASSERT(s_Instance, "Application not created!");
+		return *s_Instance;
 	}
 
 	bool Application::OnWindowResize(WindowResizeEvent& e)
 	{
 		const uint32_t width = e.GetWidth(), height = e.GetHeight();
-		if (width == 0 || height == 0)
-			return false;
+		m_Minimized = (width == 0 || height == 0);
 
-		return false;
+		if (!m_Minimized)
+			Renderer::OnWindowResize(width, height);
+
+		return false;        // let layers react too
 	}
 
 	bool Application::OnWindowMinimize(WindowMinimizeEvent& e)
@@ -127,9 +154,9 @@ namespace Eruption
 		return false;
 	}
 
-	bool Application::OnWindowClose(WindowCloseEvent& e)
+	bool Application::OnWindowClose(WindowCloseEvent&)
 	{
 		Stop();
-		return false;        // give other things a chance to react to window close
+		return false;
 	}
 }        // namespace Eruption

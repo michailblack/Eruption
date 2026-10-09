@@ -1,24 +1,17 @@
 #pragma once
 #include "Eruption/Platform/Vulkan/Vulkan.h"
 
+#include <set>
+
 namespace Eruption::Vulkan
 {
 	class Instance;
 
-	enum class QueueType
-	{
-		Graphics,
-		Compute,
-		Transfer,
-		Present
-	};
-
 	class QueueFamilyIndices
 	{
 	public:
-		static constexpr uint32_t INVALID = ~0;
+		static constexpr uint32_t INVALID = ~0u;
 
-	public:
 		uint32_t Graphics = INVALID;
 		uint32_t Compute  = INVALID;
 		uint32_t Transfer = INVALID;
@@ -34,34 +27,19 @@ namespace Eruption::Vulkan
 		[[nodiscard]] std::set<uint32_t> GetUniqueIndices() const
 		{
 			std::set<uint32_t> unique;
-
-			const auto add = [&unique](const uint32_t idx) {
+			for (const uint32_t idx : {Graphics, Compute, Transfer, Present})
+			{
 				if (idx != INVALID)
 					unique.insert(idx);
-			};
-
-			add(Graphics);
-			add(Compute);
-			add(Transfer);
-			add(Present);
-
+			}
 			return unique;
 		}
 	};
 
 	class QueueFamiliesSelector
 	{
-	private:
-		struct Candidate
-		{
-			uint32_t       Index;
-			uint32_t       Count;
-			vk::QueueFlags Flags;
-			bool           CanPresent;
-		};
-
 	public:
-		explicit QueueFamiliesSelector(const vk::raii::PhysicalDevice& device, const vk::raii::SurfaceKHR& surface) :
+		QueueFamiliesSelector(const vk::raii::PhysicalDevice& device, const vk::raii::SurfaceKHR& surface) :
 		    m_PhysicalDevice(device), m_Surface(surface)
 		{
 			CacheFamilies();
@@ -78,6 +56,14 @@ namespace Eruption::Vulkan
 		[[nodiscard]] uint32_t SelectTransfer() const;
 
 	private:
+		struct Candidate
+		{
+			uint32_t       Index;
+			uint32_t       Count;
+			vk::QueueFlags Flags;
+			bool           CanPresent;
+		};
+
 		std::vector<Candidate> m_Families;
 
 		const vk::raii::PhysicalDevice& m_PhysicalDevice;
@@ -86,29 +72,24 @@ namespace Eruption::Vulkan
 
 	class PhysicalDeviceSelector
 	{
-	private:
-		struct Candidate
-		{
-			QueueFamilyIndices       QueueFamilyIndices;
-			vk::raii::PhysicalDevice PhysicalDevice;
-		};
-
 	public:
-		explicit PhysicalDeviceSelector(const Ref<Instance>& instance) : m_InstanceRef(instance) { ProcessDevices(); }
+		explicit PhysicalDeviceSelector(Ref<Instance> instance) : m_Instance(std::move(instance)) { ProcessDevices(); }
 
 		[[nodiscard]] std::pair<vk::raii::PhysicalDevice, QueueFamilyIndices> Select() const;
 
 	private:
+		struct Candidate
+		{
+			QueueFamilyIndices       Indices;
+			vk::raii::PhysicalDevice PhysicalDevice;
+		};
+
 		void ProcessDevices();
 
-		[[nodiscard]] bool IsCandidateSuitable(const Candidate& candidate) const;
-
-	private:
+		[[nodiscard]] bool     IsCandidateSuitable(const Candidate& candidate) const;
 		[[nodiscard]] uint32_t ScoreDevice(const Candidate& candidate) const;
 
-	private:
-		const Ref<Instance>& m_InstanceRef;
-
+		Ref<Instance>          m_Instance;
 		std::vector<Candidate> m_Candidates;
 	};
 
@@ -121,20 +102,18 @@ namespace Eruption::Vulkan
 		PhysicalDevice(const PhysicalDevice&)            = delete;
 		PhysicalDevice& operator=(const PhysicalDevice&) = delete;
 
-		PhysicalDevice(PhysicalDevice&&) noexcept            = default;
-		PhysicalDevice& operator=(PhysicalDevice&&) noexcept = default;
-
-		[[nodiscard]] bool IsExtensionSupported(const char* extension) const;
+		[[nodiscard]] bool IsExtensionSupported(std::string_view extension) const;
 
 		[[nodiscard]] const vk::raii::PhysicalDevice& GetVkHandle() const { return m_PhysicalDevice; }
 
-		[[nodiscard]] const vk::PhysicalDeviceProperties2&       GetProperties() const { return m_Properties; }
-		[[nodiscard]] const vk::PhysicalDeviceMemoryProperties2& GetMemoryProperties() const
+		[[nodiscard]] const vk::PhysicalDeviceProperties& GetProperties() const { return m_Properties.properties; }
+		[[nodiscard]] const vk::PhysicalDeviceMemoryProperties& GetMemoryProperties() const
 		{
-			return m_MemoryProperties;
+			return m_MemoryProperties.memoryProperties;
 		}
 
-		[[nodiscard]] vk::Format GetDepthFormat() const { return m_DepthFormat; }
+		[[nodiscard]] vk::Format              GetDepthFormat() const { return m_DepthFormat; }
+		[[nodiscard]] vk::SampleCountFlagBits GetMaxUsableSampleCount() const { return m_MaxSampleCount; }
 
 		[[nodiscard]] const QueueFamilyIndices& GetQueueFamilyIndices() const { return m_QueueFamilyIndices; }
 		[[nodiscard]] const std::vector<vk::DeviceQueueCreateInfo>& GetQueueCreateInfos() const
@@ -145,20 +124,21 @@ namespace Eruption::Vulkan
 	private:
 		void SetupQueueCreateInfos();
 		void FindDepthFormat();
+		void FindMaxSampleCount();
 
 	private:
 		vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
 
-		vk::PhysicalDeviceProperties2           m_Properties;
-		vk::PhysicalDeviceFeatures2             m_Features;
-		vk::PhysicalDeviceMemoryProperties2     m_MemoryProperties;
-		std::vector<vk::QueueFamilyProperties2> m_SupportedQueueFamilies;
-		std::vector<vk::ExtensionProperties>    m_SupportedExtensions;
+		vk::PhysicalDeviceProperties2        m_Properties;
+		vk::PhysicalDeviceMemoryProperties2  m_MemoryProperties;
+		std::vector<vk::ExtensionProperties> m_SupportedExtensions;
 
 		QueueFamilyIndices m_QueueFamilyIndices;
 
+		std::vector<float>                     m_QueuePriorities;
 		std::vector<vk::DeviceQueueCreateInfo> m_QueueCreateInfos;
 
-		vk::Format m_DepthFormat = vk::Format::eUndefined;
+		vk::Format              m_DepthFormat    = vk::Format::eUndefined;
+		vk::SampleCountFlagBits m_MaxSampleCount = vk::SampleCountFlagBits::e1;
 	};
 }        // namespace Eruption::Vulkan
